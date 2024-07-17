@@ -11,6 +11,8 @@ import torch.nn as nn
 import torchvision
 from torchvision import transforms
 
+from tqdm import tqdm
+
 
 def set_seed(seed):
     random.seed(seed)
@@ -59,7 +61,6 @@ def process_text(text):
     text = re.sub(r'\s+', ' ', text).strip()
 
     return text
-
 
 # 1. データローダーの作成
 class VQADataset(torch.utils.data.Dataset):
@@ -141,7 +142,6 @@ class VQADataset(torch.utils.data.Dataset):
         if self.answer:
             answers = [self.answer2idx[process_text(answer["answer"])] for answer in self.df["answers"][idx]]
             mode_answer_idx = mode(answers)  # 最頻値を取得（正解ラベル）
-
             return image, torch.Tensor(question), torch.Tensor(answers), int(mode_answer_idx)
 
         else:
@@ -149,7 +149,6 @@ class VQADataset(torch.utils.data.Dataset):
 
     def __len__(self):
         return len(self.df)
-
 
 # 2. 評価指標の実装
 # 簡単にするならBCEを利用する
@@ -303,6 +302,9 @@ class VQAModel(nn.Module):
         image_feature = self.resnet(image)  # 画像の特徴量
         question_feature = self.text_encoder(question)  # テキストの特徴量
 
+        #print(image_feature.shape)
+        #print(question_feature.shape)
+
         x = torch.cat([image_feature, question_feature], dim=1)
         x = self.fc(x)
 
@@ -321,9 +323,13 @@ def train(model, dataloader, optimizer, criterion, device):
     for image, question, answers, mode_answer in dataloader:
         image, question, answer, mode_answer = \
             image.to(device), question.to(device), answers.to(device), mode_answer.to(device)
+        print(image)
 
         pred = model(image, question)
+        #print(pred, mode_answer)
+        #print(pred.shape, mode_answer.shape)
         loss = criterion(pred, mode_answer.squeeze())
+        print(loss.item())
 
         optimizer.zero_grad()
         loss.backward()
@@ -378,12 +384,13 @@ def main():
     model = VQAModel(vocab_size=len(train_dataset.question2idx)+1, n_answer=len(train_dataset.answer2idx)).to(device)
 
     # optimizer / criterion
-    num_epoch = 20
+    num_epoch = 1
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-5)
 
     # train model
-    for epoch in range(num_epoch):
+    for epoch in tqdm(range(num_epoch)):
+    #for epoch in range(num_epoch):
         train_loss, train_acc, train_simple_acc, train_time = train(model, train_loader, optimizer, criterion, device)
         print(f"【{epoch + 1}/{num_epoch}】\n"
               f"train time: {train_time:.2f} [s]\n"
@@ -398,6 +405,7 @@ def main():
         image, question = image.to(device), question.to(device)
         pred = model(image, question)
         pred = pred.argmax(1).cpu().item()
+        print(pred)
         submission.append(pred)
 
     submission = [train_dataset.idx2answer[id] for id in submission]
