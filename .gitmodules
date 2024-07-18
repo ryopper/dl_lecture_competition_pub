@@ -1,0 +1,3 @@
+[submodule "models/InternVL-Chat-V1-5"]
+	path = models/InternVL-Chat-V1-5
+	url = https://huggingface.co/OpenGVLab/InternVL-Chat-V1-5
